@@ -1,15 +1,23 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const app = express();
+app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-const JWT_SECRET = process.env.JWT_SECRET || 'hasan_jim_super_secret_key_2026';
+// ⚠️ JWT_SECRET Railway Variables এ অবশ্যই সেট করুন (নিচে নোট দেখুন)
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('❌ FATAL: JWT_SECRET environment variable is not set!');
+  process.exit(1);
+}
 
 const db = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
@@ -21,7 +29,20 @@ const db = mysql.createPool({
   connectionLimit: 10
 });
 
-// AUTHENTICATION MIDDLEWARE
+// ---------- RATE LIMITERS ----------
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  message: { error: 'Too many attempts. Please try again after 15 minutes.' }
+});
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300
+});
+app.use(generalLimiter);
+
+// ---------- AUTH MIDDLEWARE ----------
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -34,9 +55,31 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// ---------- ADMIN-ONLY MIDDLEWARE ----------
+const requireAdmin = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required.' });
+  }
+  next();
+};
+
+// ---------- INPUT VALIDATION HELPERS ----------
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
 // USER AUTH ROUTES
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authLimiter, async (req, res) => {
   const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password are required.' });
+  }
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: 'Invalid email address.' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  }
+
   try {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
@@ -62,8 +105,12 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
   try {
     const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
     if (users.length === 0) return res.status(400).json({ error: 'User not found.' });
@@ -114,13 +161,19 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-app.post('/api/admin/products', authenticateToken, async (req, res) => {
+// ⚠️ এখন Admin role লাগবে প্রোডাক্ট যুক্ত/ডিলীট করতে
+app.post('/api/admin/products', authenticateToken, requireAdmin, async (req, res) => {
   const { title, category, price, original_price, stock, image, description, badge } = req.body;
+
+  if (!title || !category || !price || !image) {
+    return res.status(400).json({ error: 'Title, category, price, and image are required.' });
+  }
+
   try {
     const [result] = await db.query(
-      `INSERT INTO products (title, category, price, original_price, stock, image, description, badge) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [title, category, price, original_price || null, stock || 10, image, description, badge || 'NEW']
+      `INSERT INTO products (title, category, price, stock, image, description) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [title, category, price, stock || 10, image, description || '']
     );
     res.json({ success: true, id: result.insertId });
   } catch (err) {
@@ -128,7 +181,7 @@ app.post('/api/admin/products', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/admin/products/:id', authenticateToken, async (req, res) => {
+app.delete('/api/admin/products/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     await db.query('DELETE FROM products WHERE id = ?', [req.params.id]);
     res.json({ success: true });
@@ -191,6 +244,9 @@ app.get('/api/products/:id/reviews', async (req, res) => {
 
 app.post('/api/products/:id/reviews', authenticateToken, async (req, res) => {
   const { rating, comment } = req.body;
+  if (!comment || !comment.trim()) {
+    return res.status(400).json({ error: 'Comment is required.' });
+  }
   try {
     await db.query(
       'INSERT INTO reviews (product_id, user_name, rating, comment) VALUES (?, ?, ?, ?)',
@@ -202,15 +258,31 @@ app.post('/api/products/:id/reviews', authenticateToken, async (req, res) => {
   }
 });
 
-// CHECKOUT & TRACKING API
+// CHECKOUT & TRACKING API (এখন স্টক চেক + কমানো হয়)
 app.post('/api/checkout', async (req, res) => {
   const { customerName, customerEmail, customerPhone, shippingAddress, paymentMethod, cartItems, totalAmount } = req.body;
+
+  if (!customerName || !customerEmail || !customerPhone || !shippingAddress || !cartItems || cartItems.length === 0) {
+    return res.status(400).json({ error: 'All fields and at least one cart item are required.' });
+  }
+
   const trackingNumber = 'HJ-' + Math.floor(100000 + Math.random() * 900000);
 
   let connection;
   try {
     connection = await db.getConnection();
     await connection.beginTransaction();
+
+    // ✅ প্রথমে স্টক চেক করুন
+    for (const item of cartItems) {
+      const [[product]] = await connection.query('SELECT stock, title FROM products WHERE id = ? FOR UPDATE', [item.id]);
+      if (!product) {
+        throw new Error(`Product not found: ${item.title || item.id}`);
+      }
+      if (product.stock < item.quantity) {
+        throw new Error(`Insufficient stock for "${product.title}". Only ${product.stock} left.`);
+      }
+    }
 
     const [orderRes] = await connection.query(
       `INSERT INTO orders (customer_name, customer_email, customer_phone, shipping_address, total_amount, status, tracking_number) 
@@ -225,13 +297,18 @@ app.post('/api/checkout', async (req, res) => {
         'INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)',
         [orderId, item.id, item.quantity, item.price]
       );
+      // ✅ স্টক কমান
+      await connection.query(
+        'UPDATE products SET stock = stock - ? WHERE id = ?',
+        [item.quantity, item.id]
+      );
     }
 
     await connection.commit();
     res.json({ success: true, trackingNumber });
   } catch (err) {
     if (connection) await connection.rollback();
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   } finally {
     if (connection) connection.release();
   }

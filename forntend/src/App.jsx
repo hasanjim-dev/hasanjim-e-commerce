@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast, { Toaster } from 'react-hot-toast';
 
+// Railway live backend URL ba .env theke load korbe
+const API_BASE = import.meta.env.VITE_API_URL || 'https://hasanjim-e-commerce-production.up.railway.app';
+
 export default function App() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -47,7 +50,7 @@ export default function App() {
 
   const fetchProducts = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/products', {
+      const res = await axios.get(`${API_BASE}/api/products`, {
         params: { category: selectedCategory, search: searchTerm, sort: sortOption }
       });
       setProducts(res.data);
@@ -58,7 +61,7 @@ export default function App() {
 
   const fetchCategories = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/categories');
+      const res = await axios.get(`${API_BASE}/api/categories`);
       setCategories(res.data);
     } catch (err) {
       console.error(err);
@@ -67,7 +70,7 @@ export default function App() {
 
   const fetchWishlist = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/wishlist', getAuthHeader());
+      const res = await axios.get(`${API_BASE}/api/wishlist`, getAuthHeader());
       setWishlist(res.data);
     } catch (err) {
       console.error(err);
@@ -78,7 +81,7 @@ export default function App() {
     if (e) e.stopPropagation();
     if (!currentUser) return toast.error('Please login to save items to wishlist!');
     try {
-      const res = await axios.post('http://localhost:5000/api/wishlist/toggle', { productId }, getAuthHeader());
+      const res = await axios.post(`${API_BASE}/api/wishlist/toggle`, { productId }, getAuthHeader());
       if (res.data.added) {
         toast.success('Added to Wishlist! ❤️');
       } else {
@@ -93,7 +96,7 @@ export default function App() {
   const openProductDetails = async (product) => {
     setSelectedProduct(product);
     try {
-      const res = await axios.get(`http://localhost:5000/api/products/${product.id}/reviews`);
+      const res = await axios.get(`${API_BASE}/api/products/${product.id}/reviews`);
       setProductReviews(res.data);
     } catch (err) {
       console.error(err);
@@ -104,7 +107,7 @@ export default function App() {
     e.preventDefault();
     if (!currentUser) return toast.error('Please login to post a review');
     try {
-      await axios.post(`http://localhost:5000/api/products/${selectedProduct.id}/reviews`, reviewForm, getAuthHeader());
+      await axios.post(`${API_BASE}/api/products/${selectedProduct.id}/reviews`, reviewForm, getAuthHeader());
       toast.success('Review posted successfully!');
       setReviewForm({ rating: 5, comment: '' });
       openProductDetails(selectedProduct);
@@ -117,7 +120,7 @@ export default function App() {
     e.preventDefault();
     const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
     try {
-      const res = await axios.post(`http://localhost:5000${endpoint}`, authForm);
+      const res = await axios.post(`${API_BASE}${endpoint}`, authForm);
       localStorage.setItem('hj_user', JSON.stringify(res.data.user));
       localStorage.setItem('hj_token', res.data.token);
       setCurrentUser(res.data.user);
@@ -139,7 +142,7 @@ export default function App() {
   const handleAddProduct = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5000/api/admin/products', newProduct, getAuthHeader());
+      await axios.post(`${API_BASE}/api/admin/products`, newProduct, getAuthHeader());
       toast.success('Product added successfully!');
       setIsAdminOpen(false);
       fetchProducts();
@@ -153,7 +156,7 @@ export default function App() {
     e.stopPropagation();
     if (!window.confirm('Are you sure you want to delete this product?')) return;
     try {
-      await axios.delete(`http://localhost:5000/api/admin/products/${id}`, getAuthHeader());
+      await axios.delete(`${API_BASE}/api/admin/products/${id}`, getAuthHeader());
       toast.success('Product deleted!');
       fetchProducts();
       fetchCategories();
@@ -186,7 +189,7 @@ export default function App() {
     e.preventDefault();
     const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     try {
-      const res = await axios.post('http://localhost:5000/api/checkout', {
+      const res = await axios.post(`${API_BASE}/api/checkout`, {
         customerName: formData.name,
         customerEmail: formData.email,
         customerPhone: formData.phone,
@@ -207,7 +210,7 @@ export default function App() {
   const trackOrder = async () => {
     if (!trackingInput) return;
     try {
-      const res = await axios.get(`http://localhost:5000/api/orders/track/${trackingInput.trim()}`);
+      const res = await axios.get(`${API_BASE}/api/orders/track/${trackingInput.trim()}`);
       setTrackedOrder(res.data);
       toast.success('Order tracking details fetched');
     } catch (err) {

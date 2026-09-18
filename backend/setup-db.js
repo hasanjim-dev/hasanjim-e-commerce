@@ -98,4 +98,4 @@ async function setupDatabase() {
     }
 }
 
-setupdatabase();
+setupDatabase();  // 'D' capital করে দিন

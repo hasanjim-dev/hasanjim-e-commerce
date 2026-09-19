@@ -208,6 +208,53 @@ app.delete('/api/admin/products/:id', authenticateToken, requireAdmin, async (re
   }
 });
 
+// ---------- ADMIN DASHBOARD APIs ----------
+app.get('/api/admin/products/all', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM products ORDER BY id DESC');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const [[{ totalRevenue }]] = await db.query(
+      "SELECT COALESCE(SUM(total_amount),0) as totalRevenue FROM orders WHERE status != 'CANCELLED'"
+    );
+    const [[{ totalOrders }]] = await db.query('SELECT COUNT(*) as totalOrders FROM orders');
+    const [[{ totalProducts }]] = await db.query('SELECT COUNT(*) as totalProducts FROM products');
+    const [lowStock] = await db.query('SELECT id, title, stock FROM products WHERE stock <= 5 ORDER BY stock ASC');
+    res.json({ totalRevenue, totalOrders, totalProducts, lowStock });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/orders', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const [orders] = await db.query('SELECT * FROM orders ORDER BY id DESC LIMIT 100');
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/admin/orders/:id/status', authenticateToken, requireAdmin, async (req, res) => {
+  const { status } = req.body;
+  const allowed = ['PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status value.' });
+  }
+  try {
+    await db.query('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/categories', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT category, COUNT(*) as count FROM products GROUP BY category');

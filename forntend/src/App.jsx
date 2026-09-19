@@ -7,6 +7,9 @@ const API_BASE = import.meta.env.VITE_API_URL || 'https://hasanjim-e-commerce-pr
 
 export default function App() {
   const [products, setProducts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [categories, setCategories] = useState([]);
   const [cart, setCart] = useState(() => {
     try {
@@ -48,7 +51,11 @@ export default function App() {
     fetchProducts();
     fetchCategories();
     if (currentUser) fetchWishlist();
-  }, [selectedCategory, searchTerm, sortOption, currentUser]);
+  }, [selectedCategory, searchTerm, sortOption, currentUser, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1); // ফিল্টার বদলালে প্রথম পেজে ফিরে যাবে
+  }, [selectedCategory, searchTerm, sortOption]);
 
   useEffect(() => {
     localStorage.setItem('hj_cart', JSON.stringify(cart));
@@ -60,14 +67,18 @@ export default function App() {
   };
 
   const fetchProducts = async () => {
+    setIsLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/api/products`, {
-        params: { category: selectedCategory, search: searchTerm, sort: sortOption }
+        params: { category: selectedCategory, search: searchTerm, sort: sortOption, page: currentPage, limit: 12 }
       });
-      setProducts(res.data);
+      setProducts(res.data.products);
+      setTotalPages(res.data.totalPages);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load products. Please refresh.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -335,49 +346,91 @@ export default function App() {
         </div>
 
         {/* PRODUCT CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {products.map((p) => {
-            const isWishlisted = wishlist.some((item) => item.id === p.id);
-            const outOfStock = p.stock !== undefined && p.stock <= 0;
-            return (
-              <div key={p.id} onClick={() => openProductDetails(p)} className="group bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden hover:border-purple-500/50 transition cursor-pointer relative">
-                <div className="aspect-[4/3] bg-slate-950 relative overflow-hidden">
-                  <img src={p.image} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition" />
-
-                  <button onClick={(e) => toggleWishlist(p.id, e)} className="absolute top-2 left-2 bg-slate-900/80 backdrop-blur-md p-2 rounded-full border border-slate-700/60 hover:scale-110 transition">
-                    {isWishlisted ? '❤️' : '🤍'}
-                  </button>
-
-                  {currentUser?.role === 'admin' && (
-                    <button onClick={(e) => handleDeleteProduct(p.id, e)} className="absolute top-2 right-2 bg-red-600/80 text-white text-[10px] px-2 py-1 rounded font-bold hover:bg-red-600">
-                      Delete
-                    </button>
-                  )}
-
-                  {outOfStock && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                      <span className="text-xs font-black text-red-400 border border-red-400 px-3 py-1 rounded-full">OUT OF STOCK</span>
-                    </div>
-                  )}
-                </div>
-                <div className="p-5">
-                  <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">{p.category}</span>
-                  <h3 className="font-bold text-slate-100 text-sm truncate">{p.title}</h3>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-base font-black text-green-400">${p.price}</span>
-                    <button
-                      disabled={outOfStock}
-                      onClick={(e) => addToCart(p, e)}
-                      className="bg-slate-800 hover:bg-purple-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold"
-                    >
-                      + Add to Cart
-                    </button>
-                  </div>
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden animate-pulse">
+                <div className="aspect-[4/3] bg-slate-800"></div>
+                <div className="p-5 space-y-3">
+                  <div className="h-2 bg-slate-800 rounded w-1/3"></div>
+                  <div className="h-3 bg-slate-800 rounded w-3/4"></div>
+                  <div className="h-4 bg-slate-800 rounded w-1/2 mt-4"></div>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        ) : products.length === 0 ? (
+          <div className="text-center py-20">
+            <p className="text-slate-500 text-sm">No products found matching your criteria.</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {products.map((p) => {
+                const isWishlisted = wishlist.some((item) => item.id === p.id);
+                const outOfStock = p.stock !== undefined && p.stock <= 0;
+                return (
+                  <div key={p.id} onClick={() => openProductDetails(p)} className="group bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden hover:border-purple-500/50 transition cursor-pointer relative">
+                    <div className="aspect-[4/3] bg-slate-950 relative overflow-hidden">
+                      <img src={p.image} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition" />
+
+                      <button onClick={(e) => toggleWishlist(p.id, e)} className="absolute top-2 left-2 bg-slate-900/80 backdrop-blur-md p-2 rounded-full border border-slate-700/60 hover:scale-110 transition">
+                        {isWishlisted ? '❤️' : '🤍'}
+                      </button>
+
+                      {currentUser?.role === 'admin' && (
+                        <button onClick={(e) => handleDeleteProduct(p.id, e)} className="absolute top-2 right-2 bg-red-600/80 text-white text-[10px] px-2 py-1 rounded font-bold hover:bg-red-600">
+                          Delete
+                        </button>
+                      )}
+
+                      {outOfStock && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                          <span className="text-xs font-black text-red-400 border border-red-400 px-3 py-1 rounded-full">OUT OF STOCK</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-5">
+                      <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">{p.category}</span>
+                      <h3 className="font-bold text-slate-100 text-sm truncate">{p.title}</h3>
+                      <div className="mt-4 flex items-center justify-between">
+                        <span className="text-base font-black text-green-400">${p.price}</span>
+                        <button
+                          disabled={outOfStock}
+                          onClick={(e) => addToCart(p, e)}
+                          className="bg-slate-800 hover:bg-purple-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold"
+                        >
+                          + Add to Cart
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* PAGINATION */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-10">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 border border-slate-800 text-slate-300 disabled:opacity-30"
+                >
+                  ← Prev
+                </button>
+                <span className="text-xs text-slate-400 px-3">Page {currentPage} of {totalPages}</span>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 border border-slate-800 text-slate-300 disabled:opacity-30"
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </main>
 
       {/* WISHLIST DRAWER */}
@@ -598,65 +651,64 @@ export default function App() {
       )}
 
       {/* FOOTER */}
-      {/* FOOTER */}
-<footer className="border-t border-slate-800 mt-16 py-8 text-center text-xs text-slate-500">
-  <div className="flex justify-center gap-6 mb-3">
-    <button onClick={() => setActivePolicy('terms')} className="hover:text-slate-300 underline">Terms & Conditions</button>
-    <button onClick={() => setActivePolicy('privacy')} className="hover:text-slate-300 underline">Privacy Policy</button>
-    <button onClick={() => setActivePolicy('refund')} className="hover:text-slate-300 underline">Refund Policy</button>
-  </div>
-  © 2026 HASAN JIM Luxury Store. All rights reserved.
-</footer>
+      <footer className="border-t border-slate-800 mt-16 py-8 text-center text-xs text-slate-500">
+        <div className="flex justify-center gap-6 mb-3">
+          <button onClick={() => setActivePolicy('terms')} className="hover:text-slate-300 underline">Terms & Conditions</button>
+          <button onClick={() => setActivePolicy('privacy')} className="hover:text-slate-300 underline">Privacy Policy</button>
+          <button onClick={() => setActivePolicy('refund')} className="hover:text-slate-300 underline">Refund Policy</button>
+        </div>
+        © 2026 HASAN JIM Luxury Store. All rights reserved.
+      </footer>
 
-{/* POLICY MODAL */}
-{activePolicy && (
-  <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-lg relative max-h-[80vh] overflow-y-auto">
-      <button onClick={() => setActivePolicy(null)} className="absolute top-4 right-4 text-slate-400">✕</button>
+      {/* POLICY MODAL */}
+      {activePolicy && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-lg relative max-h-[80vh] overflow-y-auto">
+            <button onClick={() => setActivePolicy(null)} className="absolute top-4 right-4 text-slate-400">✕</button>
 
-      {activePolicy === 'terms' && (
-        <div>
-          <h2 className="text-lg font-black text-white mb-4">Terms & Conditions</h2>
-          <div className="text-xs text-slate-400 space-y-3">
-            <p>By using HASAN JIM Luxury Store, you agree to the following terms:</p>
-            <p><strong className="text-slate-300">1. Orders:</strong> All orders are subject to availability and confirmation. We reserve the right to cancel any order at our discretion.</p>
-            <p><strong className="text-slate-300">2. Pricing:</strong> Prices are listed in USD and are subject to change without prior notice.</p>
-            <p><strong className="text-slate-300">3. Account:</strong> You are responsible for maintaining the confidentiality of your account credentials.</p>
-            <p><strong className="text-slate-300">4. Content:</strong> Product images and descriptions are for illustration purposes; actual items may vary slightly.</p>
-            <p><strong className="text-slate-300">5. Liability:</strong> HASAN JIM is not liable for indirect damages arising from the use of this website.</p>
+            {activePolicy === 'terms' && (
+              <div>
+                <h2 className="text-lg font-black text-white mb-4">Terms & Conditions</h2>
+                <div className="text-xs text-slate-400 space-y-3">
+                  <p>By using HASAN JIM Luxury Store, you agree to the following terms:</p>
+                  <p><strong className="text-slate-300">1. Orders:</strong> All orders are subject to availability and confirmation. We reserve the right to cancel any order at our discretion.</p>
+                  <p><strong className="text-slate-300">2. Pricing:</strong> Prices are listed in USD and are subject to change without prior notice.</p>
+                  <p><strong className="text-slate-300">3. Account:</strong> You are responsible for maintaining the confidentiality of your account credentials.</p>
+                  <p><strong className="text-slate-300">4. Content:</strong> Product images and descriptions are for illustration purposes; actual items may vary slightly.</p>
+                  <p><strong className="text-slate-300">5. Liability:</strong> HASAN JIM is not liable for indirect damages arising from the use of this website.</p>
+                </div>
+              </div>
+            )}
+
+            {activePolicy === 'privacy' && (
+              <div>
+                <h2 className="text-lg font-black text-white mb-4">Privacy Policy</h2>
+                <div className="text-xs text-slate-400 space-y-3">
+                  <p>We value your privacy. This policy explains how we collect and use your information.</p>
+                  <p><strong className="text-slate-300">1. Information We Collect:</strong> Name, email, phone number, and shipping address provided during checkout or registration.</p>
+                  <p><strong className="text-slate-300">2. How We Use It:</strong> To process orders, communicate order status, and improve our services.</p>
+                  <p><strong className="text-slate-300">3. Data Sharing:</strong> We do not sell your personal information to third parties.</p>
+                  <p><strong className="text-slate-300">4. Security:</strong> Passwords are encrypted; sensitive payment details are never stored on our servers.</p>
+                  <p><strong className="text-slate-300">5. Contact:</strong> For privacy concerns, reach us through our support channel.</p>
+                </div>
+              </div>
+            )}
+
+            {activePolicy === 'refund' && (
+              <div>
+                <h2 className="text-lg font-black text-white mb-4">Refund & Return Policy</h2>
+                <div className="text-xs text-slate-400 space-y-3">
+                  <p><strong className="text-slate-300">1. Return Window:</strong> Items may be returned within 7 days of delivery if unused and in original packaging.</p>
+                  <p><strong className="text-slate-300">2. Refunds:</strong> Approved refunds are processed within 5-7 business days to the original payment method.</p>
+                  <p><strong className="text-slate-300">3. Non-Returnable Items:</strong> Items marked as final sale or personalized products cannot be returned.</p>
+                  <p><strong className="text-slate-300">4. Damaged Items:</strong> Report damaged or incorrect items within 48 hours of delivery for a replacement.</p>
+                  <p><strong className="text-slate-300">5. Cash on Delivery Orders:</strong> Refunds for COD orders are issued as store credit or bank transfer.</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
-
-      {activePolicy === 'privacy' && (
-        <div>
-          <h2 className="text-lg font-black text-white mb-4">Privacy Policy</h2>
-          <div className="text-xs text-slate-400 space-y-3">
-            <p>We value your privacy. This policy explains how we collect and use your information.</p>
-            <p><strong className="text-slate-300">1. Information We Collect:</strong> Name, email, phone number, and shipping address provided during checkout or registration.</p>
-            <p><strong className="text-slate-300">2. How We Use It:</strong> To process orders, communicate order status, and improve our services.</p>
-            <p><strong className="text-slate-300">3. Data Sharing:</strong> We do not sell your personal information to third parties.</p>
-            <p><strong className="text-slate-300">4. Security:</strong> Passwords are encrypted; sensitive payment details are never stored on our servers.</p>
-            <p><strong className="text-slate-300">5. Contact:</strong> For privacy concerns, reach us through our support channel.</p>
-          </div>
-        </div>
-      )}
-
-      {activePolicy === 'refund' && (
-        <div>
-          <h2 className="text-lg font-black text-white mb-4">Refund & Return Policy</h2>
-          <div className="text-xs text-slate-400 space-y-3">
-            <p><strong className="text-slate-300">1. Return Window:</strong> Items may be returned within 7 days of delivery if unused and in original packaging.</p>
-            <p><strong className="text-slate-300">2. Refunds:</strong> Approved refunds are processed within 5-7 business days to the original payment method.</p>
-            <p><strong className="text-slate-300">3. Non-Returnable Items:</strong> Items marked as final sale or personalized products cannot be returned.</p>
-            <p><strong className="text-slate-300">4. Damaged Items:</strong> Report damaged or incorrect items within 48 hours of delivery for a replacement.</p>
-            <p><strong className="text-slate-300">5. Cash on Delivery Orders:</strong> Refunds for COD orders are issued as store credit or bank transfer.</p>
-          </div>
-        </div>
-      )}
-    </div>
-  </div>
-)}
     </div>
   );
 }

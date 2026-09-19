@@ -137,25 +137,43 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
 // PRODUCTS API
 app.get('/api/products', async (req, res) => {
-  const { category, search, sort } = req.query;
+  const { category, search, sort, page = 1, limit = 12 } = req.query;
   try {
     let query = 'SELECT * FROM products WHERE 1=1';
+    let countQuery = 'SELECT COUNT(*) as total FROM products WHERE 1=1';
     let params = [];
 
     if (category && category !== 'All' && category !== 'undefined') {
       query += ' AND category = ?';
+      countQuery += ' AND category = ?';
       params.push(category);
     }
     if (search && search.trim() !== '') {
       query += ' AND (title LIKE ? OR description LIKE ?)';
+      countQuery += ' AND (title LIKE ? OR description LIKE ?)';
       params.push(`%${search.trim()}%`, `%${search.trim()}%`);
     }
+
+    const [[{ total }]] = await db.query(countQuery, params);
+
     if (sort === 'price_low') query += ' ORDER BY price ASC';
     else if (sort === 'price_high') query += ' ORDER BY price DESC';
     else query += ' ORDER BY id DESC';
 
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.max(1, parseInt(limit));
+    const offset = (pageNum - 1) * limitNum;
+
+    query += ' LIMIT ? OFFSET ?';
+    params.push(limitNum, offset);
+
     const [rows] = await db.query(query, params);
-    res.json(rows);
+    res.json({
+      products: rows,
+      totalPages: Math.ceil(total / limitNum),
+      currentPage: pageNum,
+      totalItems: total
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

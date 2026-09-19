@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://hasanjim-e-commerce-alpha.vercel.app/sitemap.xml

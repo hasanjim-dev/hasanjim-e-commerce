@@ -30,6 +30,7 @@ export default function App() {
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [activePolicy, setActivePolicy] = useState(null); // 'terms' | 'privacy' | 'refund' | null
   const [authMode, setAuthMode] = useState('login');
 
   const [currentUser, setCurrentUser] = useState(JSON.parse(localStorage.getItem('hj_user')) || null);
@@ -597,9 +598,65 @@ export default function App() {
       )}
 
       {/* FOOTER */}
-      <footer className="border-t border-slate-800 mt-16 py-8 text-center text-xs text-slate-500">
-        © 2026 HASAN JIM Luxury Store. All rights reserved.
-      </footer>
+      {/* FOOTER */}
+<footer className="border-t border-slate-800 mt-16 py-8 text-center text-xs text-slate-500">
+  <div className="flex justify-center gap-6 mb-3">
+    <button onClick={() => setActivePolicy('terms')} className="hover:text-slate-300 underline">Terms & Conditions</button>
+    <button onClick={() => setActivePolicy('privacy')} className="hover:text-slate-300 underline">Privacy Policy</button>
+    <button onClick={() => setActivePolicy('refund')} className="hover:text-slate-300 underline">Refund Policy</button>
+  </div>
+  © 2026 HASAN JIM Luxury Store. All rights reserved.
+</footer>
+
+{/* POLICY MODAL */}
+{activePolicy && (
+  <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-lg relative max-h-[80vh] overflow-y-auto">
+      <button onClick={() => setActivePolicy(null)} className="absolute top-4 right-4 text-slate-400">✕</button>
+
+      {activePolicy === 'terms' && (
+        <div>
+          <h2 className="text-lg font-black text-white mb-4">Terms & Conditions</h2>
+          <div className="text-xs text-slate-400 space-y-3">
+            <p>By using HASAN JIM Luxury Store, you agree to the following terms:</p>
+            <p><strong className="text-slate-300">1. Orders:</strong> All orders are subject to availability and confirmation. We reserve the right to cancel any order at our discretion.</p>
+            <p><strong className="text-slate-300">2. Pricing:</strong> Prices are listed in USD and are subject to change without prior notice.</p>
+            <p><strong className="text-slate-300">3. Account:</strong> You are responsible for maintaining the confidentiality of your account credentials.</p>
+            <p><strong className="text-slate-300">4. Content:</strong> Product images and descriptions are for illustration purposes; actual items may vary slightly.</p>
+            <p><strong className="text-slate-300">5. Liability:</strong> HASAN JIM is not liable for indirect damages arising from the use of this website.</p>
+          </div>
+        </div>
+      )}
+
+      {activePolicy === 'privacy' && (
+        <div>
+          <h2 className="text-lg font-black text-white mb-4">Privacy Policy</h2>
+          <div className="text-xs text-slate-400 space-y-3">
+            <p>We value your privacy. This policy explains how we collect and use your information.</p>
+            <p><strong className="text-slate-300">1. Information We Collect:</strong> Name, email, phone number, and shipping address provided during checkout or registration.</p>
+            <p><strong className="text-slate-300">2. How We Use It:</strong> To process orders, communicate order status, and improve our services.</p>
+            <p><strong className="text-slate-300">3. Data Sharing:</strong> We do not sell your personal information to third parties.</p>
+            <p><strong className="text-slate-300">4. Security:</strong> Passwords are encrypted; sensitive payment details are never stored on our servers.</p>
+            <p><strong className="text-slate-300">5. Contact:</strong> For privacy concerns, reach us through our support channel.</p>
+          </div>
+        </div>
+      )}
+
+      {activePolicy === 'refund' && (
+        <div>
+          <h2 className="text-lg font-black text-white mb-4">Refund & Return Policy</h2>
+          <div className="text-xs text-slate-400 space-y-3">
+            <p><strong className="text-slate-300">1. Return Window:</strong> Items may be returned within 7 days of delivery if unused and in original packaging.</p>
+            <p><strong className="text-slate-300">2. Refunds:</strong> Approved refunds are processed within 5-7 business days to the original payment method.</p>
+            <p><strong className="text-slate-300">3. Non-Returnable Items:</strong> Items marked as final sale or personalized products cannot be returned.</p>
+            <p><strong className="text-slate-300">4. Damaged Items:</strong> Report damaged or incorrect items within 48 hours of delivery for a replacement.</p>
+            <p><strong className="text-slate-300">5. Cash on Delivery Orders:</strong> Refunds for COD orders are issued as store credit or bank transfer.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+)}
     </div>
   );
 }
